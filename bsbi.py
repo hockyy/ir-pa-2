@@ -245,7 +245,7 @@ class BSBIIndex:
             result = sorted_merge_posts_and_tfs(result, current_pairs)
         return result
 
-    def WandTopK(self, lists_of_query, score_function):
+    def WandTopK(self, lists_of_query, K, score_function):
         n = len(lists_of_query)
         N = len(self.doc_length)
 
@@ -264,7 +264,7 @@ class BSBIIndex:
         upperbound_score = []
         idf = []
         for i in range(n):
-            idf[i] = math.log(N / len(lists_of_query[i][0]))
+            idf.append(math.log(N / len(lists_of_query[i][0])))
             max_arg = 0
 
             # Karena sebanding, cukup bandingkan tf doang
@@ -282,8 +282,7 @@ class BSBIIndex:
             lists_of_query[i][1].append(INT_MAX)
 
         # Heap is (-score, doc_id), biar top kebalik scorenya minus
-        topK = [(0, -1) for _ in range(n)]
-        print(topK)
+        topK = [(0, -1) for _ in range(K)]
         cur_doc = -1
         full_eval = 0
 
@@ -302,7 +301,7 @@ class BSBIIndex:
 
             pivot = INT_MAX
             for idx in order:
-                prefix_sum += upperbound_score[idx[1]]
+                prefix_sum += upperbound_score[idx[0]]
                 if prefix_sum >= threshold:
                     pivot = get_doc_id(idx)
                     break
@@ -310,6 +309,7 @@ class BSBIIndex:
                 break
 
             if get_doc_id(order[0]) == pivot:
+                # print(f"Fully evaluating {pivot}")
                 # Fully evaluating
                 full_eval += 1
                 cur_doc = pivot
@@ -319,29 +319,29 @@ class BSBIIndex:
                     total_score += score_function(
                         doc_id=get_doc_id(idx),
                         tf=get_tf(idx),
-                        idf=idf[idx[1]]
+                        idf=idf[idx[0]]
                     )
-                heapq.heappush(topK, (-total_score, pivot))
+                heapq.heappush(topK, (total_score, pivot))
                 heapq.heappop(topK)
                 readjust(order, cur_doc + 1)
             else:
                 readjust(order, pivot)
-            break
 
         # Selama tidak berguna pop saja
-        while topK[0][1] == -1:
+        while len(topK) and topK[0][1] == -1:
             heapq.heappop(topK)
-
+        print(f"Evaluated {full_eval} scores")
         return sorted(
-            [(-score, self.doc_id_map[doc_id]) for [score, doc_id] in topK],
-            key=lambda x: x[1],
+            [(score, self.doc_id_map[doc_id]) for [score, doc_id] in topK],
+            key=lambda x: x[0],
             reverse=True
         )
 
     def sort_and_cut(self, result, k):
+        print(f"Evaluated {len(result)} scores")
         result = sorted(result, key=lambda x: x[1], reverse=True)
         if len(result) > k:
-            result = result[:k + 1]
+            result = result[:k]
         for i in range(len(result)):
             # print(result[i][0], self.doc_id_map[result[i][0]], result[i][1])
             result[i] = (result[i][1], self.doc_id_map[result[i][0]])
@@ -393,7 +393,7 @@ class BSBIIndex:
             result = self.TaaT(lists_of_query, tfidf)
             return self.sort_and_cut(result, k)
         else:
-            return self.WandTopK(lists_of_query, tfidf)
+            return self.WandTopK(lists_of_query, k, tfidf)
 
     def retrieve_bm25(self, query, k=10, optimize=False, k1=1.6, b=0.75, debug=False):
         """
@@ -444,7 +444,7 @@ class BSBIIndex:
             result = self.TaaT(lists_of_query, bm25)
             return self.sort_and_cut(result, k)
         else:
-            return self.WandTopK(lists_of_query, bm25)
+            return self.WandTopK(lists_of_query, k, bm25)
 
     def index(self):
         """
