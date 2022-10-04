@@ -59,6 +59,8 @@ class BSBIIndex:
     def __init__(self, data_dir, output_dir, postings_encoding, index_name="main_index"):
         self.term_id_map = IdMap()
         self.doc_id_map = IdMap()
+        self.doc_length = dict()
+        self.average_doc_length = -1
         self.data_dir = data_dir
         self.output_dir = output_dir
         self.index_name = index_name
@@ -77,12 +79,15 @@ class BSBIIndex:
             pickle.dump(self.doc_id_map, f)
 
     def load(self):
-        """Memuat doc_id_map and term_id_map dari output directory"""
+        """Memuat doc_length, doc_id_map, and term_id_map dari output directory"""
 
         with open(os.path.join(self.output_dir, 'terms.dict'), 'rb') as f:
             self.term_id_map = pickle.load(f)
         with open(os.path.join(self.output_dir, 'docs.dict'), 'rb') as f:
             self.doc_id_map = pickle.load(f)
+        with InvertedIndexReader(self.index_name, self.postings_encoding, self.output_dir) as merged_index:
+            self.doc_length = merged_index.doc_length
+            self.average_doc_length = merged_index.average_doc_length
 
     def parse_block(self, block_dir_relative):
         """
@@ -210,16 +215,14 @@ class BSBIIndex:
             print(tokenized_query)
         lists_of_query = []
 
-        n = -1
         with InvertedIndexReader(self.index_name, self.postings_encoding, self.output_dir) as merged_index:
-            n = len(merged_index.doc_length)
             for token in tqdm(tokenized_query):
                 if token not in self.term_id_map: continue
                 lists_of_query.append(merged_index.get_postings_list(self.term_id_map[token]))
 
         lists_of_query.sort(key=lambda x: len(x[0]))
 
-        return n, lists_of_query
+        return lists_of_query
 
     def sort_and_cut(self, result, k):
         result = sorted(result, key=lambda x: x[1], reverse=True)
@@ -266,7 +269,8 @@ class BSBIIndex:
         JANGAN LEMPAR ERROR/EXCEPTION untuk terms yang TIDAK ADA di collection.
 
         """
-        n, lists_of_query = self.retrieve(query, debug)
+        lists_of_query = self.retrieve(query, debug)
+        n = len(self.doc_length)
         result = []
         len_postings = len(lists_of_query)
         # print(lists_of_query)
