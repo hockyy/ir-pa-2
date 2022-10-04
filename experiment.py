@@ -1,3 +1,4 @@
+import math
 import re
 from bsbi import BSBIIndex
 from compression import VBEPostings
@@ -5,7 +6,7 @@ from compression import VBEPostings
 ######## >>>>> 3 IR metrics: RBP p = 0.8, DCG, dan AP
 
 def rbp(ranking, p = 0.8):
-  """ menghitung search effectiveness metric score dengan 
+  """ menghitung search effectiveness metric score dengan
       Rank Biased Precision (RBP)
 
       Parameters
@@ -16,20 +17,20 @@ def rbp(ranking, p = 0.8):
          Contoh: [1, 0, 1, 1, 1, 0] berarti dokumen di rank-1 relevan,
                  di rank-2 tidak relevan, di rank-3,4,5 relevan, dan
                  di rank-6 tidak relevan
-        
+
       Returns
       -------
       Float
         score RBP
   """
   score = 0.
-  for i in range(1, len(ranking)):
+  for i in range(1, len(ranking) + 1):
     pos = i - 1
     score += ranking[pos] * (p ** (i - 1))
   return (1 - p) * score
 
 def dcg(ranking):
-  """ menghitung search effectiveness metric score dengan 
+  """ menghitung search effectiveness metric score dengan
       Discounted Cumulative Gain
 
       Parameters
@@ -40,17 +41,24 @@ def dcg(ranking):
          Contoh: [1, 0, 1, 1, 1, 0] berarti dokumen di rank-1 relevan,
                  di rank-2 tidak relevan, di rank-3,4,5 relevan, dan
                  di rank-6 tidak relevan
-        
+
       Returns
       -------
       Float
         score DCG
   """
-  # TODO
-  return 0.0
+
+  score = 0.
+  for i in range(1, len(ranking) + 1):
+    pos = i - 1
+    score += ranking[pos] / math.log2(i + 1)
+  return score
+
+def prec(ranking):
+  return sum(ranking) / len(ranking)
 
 def ap(ranking):
-  """ menghitung search effectiveness metric score dengan 
+  """ menghitung search effectiveness metric score dengan
       Average Precision
 
       Parameters
@@ -61,19 +69,23 @@ def ap(ranking):
          Contoh: [1, 0, 1, 1, 1, 0] berarti dokumen di rank-1 relevan,
                  di rank-2 tidak relevan, di rank-3,4,5 relevan, dan
                  di rank-6 tidak relevan
-        
+
       Returns
       -------
       Float
         score AP
   """
-  # TODO
-  return 0.0
+  score = 0.
+  r = sum(ranking)
+  for i in range(1, len(ranking) + 1):
+    pos = i - 1
+    score += (prec(ranking[:i]) / r) * ranking[pos]
+  return score
 
 ######## >>>>> memuat qrels
 
 def load_qrels(qrel_file = "qrels.txt", max_q_id = 30, max_doc_id = 1033):
-  """ memuat query relevance judgment (qrels) 
+  """ memuat query relevance judgment (qrels)
       dalam format dictionary of dictionary
       qrels[query id][document id]
 
@@ -95,7 +107,7 @@ def load_qrels(qrel_file = "qrels.txt", max_q_id = 30, max_doc_id = 1033):
 ######## >>>>> EVALUASI !
 
 def eval(qrels, query_file = "queries.txt", k = 1000):
-  """ 
+  """
     loop ke semua 30 query, hitung score di setiap query,
     lalu hitung MEAN SCORE over those 30 queries.
     untuk setiap query, kembalikan top-1000 documents

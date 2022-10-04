@@ -1,3 +1,7 @@
+## Referensi:
+# https://www.analyticssteps.com/blogs/nltk-python-tutorial-beginners
+# https://www.nltk.org/howto/stem.html
+
 import os
 import pickle
 import contextlib
@@ -9,6 +13,34 @@ from index import InvertedIndexReader, InvertedIndexWriter
 from util import IdMap, sorted_merge_posts_and_tfs
 from compression import StandardPostings, VBEPostings
 from tqdm import tqdm
+import nltk
+from nltk.corpus import stopwords
+from nltk.stem.snowball import SnowballStemmer
+from nltk.stem.porter import *
+from nltk import word_tokenize
+from string import punctuation
+
+punctuation = list(punctuation)
+
+nltk.download('stopwords')
+nltk.download('punkt')
+
+
+class Cleaner:
+    # stemmer = PorterStemmer()
+    stemmer = SnowballStemmer("english")
+    stop_words = stopwords.words('english')
+
+    @staticmethod
+    def clean_and_tokenize(uncleaned_sentence):
+        tokenized_words = word_tokenize(uncleaned_sentence)
+        stemmed = [Cleaner.stemmer.stem(word) for word in tokenized_words]
+        cleaned_tokens = []
+        for token in stemmed:
+            if (token not in Cleaner.stop_words) and (token not in punctuation):
+                cleaned_tokens.append(token)
+        return cleaned_tokens
+
 
 class BSBIIndex:
     """
@@ -23,7 +55,8 @@ class BSBIIndex:
                     VBEPostings, dsb.
     index_name(str): Nama dari file yang berisi inverted index
     """
-    def __init__(self, data_dir, output_dir, postings_encoding, index_name = "main_index"):
+
+    def __init__(self, data_dir, output_dir, postings_encoding, index_name="main_index"):
         self.term_id_map = IdMap()
         self.doc_id_map = IdMap()
         self.data_dir = data_dir
@@ -83,8 +116,21 @@ class BSBIIndex:
         termIDs dan docIDs. Dua variable ini harus 'persist' untuk semua pemanggilan
         parse_block(...).
         """
-        # TODO
-        return []
+
+        block_path = os.path.join(self.data_dir, block_dir_relative)
+
+        td_pairs = []
+        # print(f"Currently processing... {block_path}")
+        for doc_file_name in next(os.walk(block_path))[2]:
+            current_doc_id = self.doc_id_map[doc_file_name]
+            doc_path = os.path.join(block_path, doc_file_name)
+            with open(doc_path, "r") as f:
+                tokenized_words = Cleaner.clean_and_tokenize(f.read())
+                for token in tokenized_words:
+                    current_term_id = self.term_id_map[token]
+                    td_pairs.append((current_term_id, current_doc_id))
+
+        return td_pairs
 
     def invert_write(self, td_pairs, index):
         """
@@ -108,7 +154,15 @@ class BSBIIndex:
         index: InvertedIndexWriter
             Inverted index pada disk (file) yang terkait dengan suatu "block"
         """
-        # TODO
+        term_dict = dict()
+        for term_id, doc_id in td_pairs:
+            term_dict.setdefault(term_id, dict())
+            term_dict[term_id].setdefault(doc_id, 0)
+            term_dict[term_id][doc_id] += 1
+        for term_id in sorted(term_dict.keys()):
+            doc_fq_pairs = sorted(term_dict[term_id].items())
+            unzipped = list(zip(*doc_fq_pairs))
+            index.append(term_id, list(unzipped[0]), list(unzipped[1]))
 
     def merge(self, indices, merged_index):
         """
@@ -131,9 +185,9 @@ class BSBIIndex:
             semua intermediate InvertedIndexWriter objects.
         """
         # kode berikut mengasumsikan minimal ada 1 term
-        merged_iter = heapq.merge(*indices, key = lambda x: x[0])
-        curr, postings, tf_list = next(merged_iter) # first item
-        for t, postings_, tf_list_ in merged_iter: # from the second item
+        merged_iter = heapq.merge(*indices, key=lambda x: x[0])
+        curr, postings, tf_list = next(merged_iter)  # first item
+        for t, postings_, tf_list_ in merged_iter:  # from the second item
             if t == curr:
                 zip_p_tf = sorted_merge_posts_and_tfs(list(zip(postings, tf_list)), \
                                                       list(zip(postings_, tf_list_)))
@@ -144,7 +198,7 @@ class BSBIIndex:
                 curr, postings, tf_list = t, postings_, tf_list_
         merged_index.append(curr, postings, tf_list)
 
-    def retrieve_tfidf(self, query, k = 10):
+    def retrieve_tfidf(self, query, k=10):
         """
         Melakukan Ranked Retrieval dengan skema TaaT (Term-at-a-Time).
         Method akan mengembalikan top-K retrieval results.
@@ -157,7 +211,7 @@ class BSBIIndex:
         Score = untuk setiap term di query, akumulasikan w(t, Q) * w(t, D).
                 (tidak perlu dinormalisasi dengan panjang dokumen)
 
-        catatan: 
+        catatan:
             1. informasi DF(t) ada di dictionary postings_dict pada merged index
             2. informasi TF(t, D) ada di tf_li
             3. informasi N bisa didapat dari doc_length pada merged index, len(doc_length)
@@ -180,8 +234,38 @@ class BSBIIndex:
         JANGAN LEMPAR ERROR/EXCEPTION untuk terms yang TIDAK ADA di collection.
 
         """
-        # TODO
-        return []
+
+        tokenized_query = Cleaner.clean_and_tokenize(query)
+        lists_of_query_postings = []
+        lists_of_query_tf = []
+        n = -1
+        with InvertedIndexReader(self.index_name, self.postings_encoding, self.output_dir) as merged_index:
+            n = len(merged_index.doc_length)
+            for token in tokenized_query:
+                if token not in self.term_id_map: continue
+                current_postings, current_tf = merged_index.get_postings_list(self.term_id_map[token])
+                lists_of_query_postings.append(current_postings)
+                lists_of_query_tf.append(current_tf)
+
+        assert n != -1
+        len_postings = len(lists_of_query_postings)
+        if len_postings == 0: return []
+        lists_of_query_postings.sort(key=len)
+
+        result = []
+        for i in range(len_postings):
+            # w(t, Q) = IDF = log (N / df(t))
+            df = len(lists_of_query_postings[i])
+            idf = math.log(n / df)
+            for j in range(df):
+                # Count tf
+                lists_of_query_postings[i][j][1] = 1 + math.log(lists_of_query_postings[i][j][1])
+                lists_of_query_postings[i][j][1] *= idf
+            result = sorted_merge_posts_and_tfs(result, lists_of_query_postings[i])
+            # for tmp in result: print(tmp, self.doc_id_map[tmp])
+            # print()
+
+        return result
 
     def index(self):
         """
@@ -196,24 +280,29 @@ class BSBIIndex:
         # loop untuk setiap sub-directory di dalam folder collection (setiap block)
         for block_dir_relative in tqdm(sorted(next(os.walk(self.data_dir))[1])):
             td_pairs = self.parse_block(block_dir_relative)
-            index_id = 'intermediate_index_'+block_dir_relative
+            index_id = 'intermediate_index_' + block_dir_relative
             self.intermediate_indices.append(index_id)
-            with InvertedIndexWriter(index_id, self.postings_encoding, directory = self.output_dir) as index:
+            with InvertedIndexWriter(index_id, self.postings_encoding, directory=self.output_dir) as index:
                 self.invert_write(td_pairs, index)
                 td_pairs = None
-    
+
         self.save()
 
-        with InvertedIndexWriter(self.index_name, self.postings_encoding, directory = self.output_dir) as merged_index:
+        with InvertedIndexWriter(self.index_name, self.postings_encoding, directory=self.output_dir) as merged_index:
             with contextlib.ExitStack() as stack:
-                indices = [stack.enter_context(InvertedIndexReader(index_id, self.postings_encoding, directory=self.output_dir))
-                               for index_id in self.intermediate_indices]
+                indices = [stack.enter_context(
+                    InvertedIndexReader(index_id, self.postings_encoding, directory=self.output_dir))
+                    for index_id in self.intermediate_indices]
                 self.merge(indices, merged_index)
 
 
 if __name__ == "__main__":
 
-    BSBI_instance = BSBIIndex(data_dir = 'collection', \
-                              postings_encoding = VBEPostings, \
-                              output_dir = 'index')
-    BSBI_instance.index() # memulai indexing!
+    try:
+        os.mkdir("index")
+    except:
+        pass
+    BSBI_instance = BSBIIndex(data_dir='collection',
+                              postings_encoding=VBEPostings,
+                              output_dir='index')
+    BSBI_instance.index()  # memulai indexing!

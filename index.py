@@ -225,6 +225,12 @@ class InvertedIndexWriter(InvertedIndex):
 
 
 if __name__ == "__main__":
+
+    try:
+        os.mkdir("tmp")
+    except:
+        pass
+
     from compression import VBEPostings
 
     with InvertedIndexWriter('test', postings_encoding=VBEPostings, directory='./tmp/') as index:
