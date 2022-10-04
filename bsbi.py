@@ -208,7 +208,6 @@ class BSBIIndex:
         if not self.loaded:
             self.load()
             self.loaded = 1
-            
         tokenized_query = Cleaner.clean_and_tokenize(query)
         if (debug):
             print("tokenized into: ")
@@ -223,6 +222,27 @@ class BSBIIndex:
         lists_of_query.sort(key=lambda x: len(x[0]))
 
         return lists_of_query
+
+    def TaaT(self, lists_of_query, scoreFunction):
+        n = len(self.doc_length)
+        result = []
+        len_postings = len(lists_of_query)
+        for i in range(len_postings):
+            df = len(lists_of_query[i][0])
+            idf = math.log(n / df)
+            current_pairs = []
+            for j in range(df):
+                # count score in this doc iff lists_of_query_tf[i][j] > 0
+                assert len(lists_of_query[i][0]) == len(lists_of_query[i][1])
+                # print(lists_of_query[0][i][j], lists_of_query_tf[i][j])
+                current_score = scoreFunction(
+                    docId=lists_of_query[i][0][j],
+                    tf=lists_of_query[i][1][j],
+                    idf=idf
+                )
+                current_pairs.append((lists_of_query[i][0][j], current_score))
+            result = sorted_merge_posts_and_tfs(result, current_pairs)
+        return result
 
     def sort_and_cut(self, result, k):
         result = sorted(result, key=lambda x: x[1], reverse=True)
@@ -270,25 +290,56 @@ class BSBIIndex:
 
         """
         lists_of_query = self.retrieve(query, debug)
-        n = len(self.doc_length)
-        result = []
-        len_postings = len(lists_of_query)
-        # print(lists_of_query)
-        for i in range(len_postings):
-            # w(t, Q) = IDF = log (N / df(t))
-            # print(lists_of_query[i])
-            df = len(lists_of_query[i][0])
-            idf = math.log(n / df)
-            current_pairs = []
-            for j in range(df):
-                # count score in this doc iff lists_of_query_tf[i][j] > 0
-                assert len(lists_of_query[i][0]) == len(lists_of_query[i][1])
-                # print(lists_of_query[0][i][j], lists_of_query_tf[i][j])
-                current_score = (1 + math.log(lists_of_query[i][1][j])) * idf
-                current_pairs.append((lists_of_query[i][0][j], current_score))
-            result = sorted_merge_posts_and_tfs(result, current_pairs)
-            # for tmp in result: print(tmp, self.doc_id_map[tmp])
-            # print()
+
+        def tfidf(docId, tf, idf):
+            return (1 + math.log(tf)) * idf
+
+        result = self.TaaT(lists_of_query, tfidf)
+        return self.sort_and_cut(result, k)
+
+    def retrieve_bm25(self, query, k=10, k1=1.6, b=0.75, debug=False):
+        """
+        Melakukan Ranked Retrieval dengan skema TaaT (Term-at-a-Time).
+        Method akan mengembalikan top-K retrieval results.
+
+        w(t, D) = ((k1 + 1) * tf(t, D)) / (k1 * ((1 - b) + b * docsLength(D) / averageDocsLength) + tf(t, D)s)
+
+        w(t, Q) = IDF = log (N / df(t))
+
+        Score = untuk setiap term di query, akumulasikan w(t, Q) * w(t, D).
+                (tidak perlu dinormalisasi dengan panjang dokumen)
+
+        catatan:
+            1. informasi DF(t) ada di dictionary postings_dict pada merged index
+            2. informasi TF(t, D) ada di tf_li
+            3. informasi N bisa didapat dari doc_length pada merged index, len(doc_length)
+
+        Parameters
+        ----------
+        query: str
+            Query tokens yang dipisahkan oleh spasi
+
+            contoh: Query "universitas indonesia depok" artinya ada
+            tiga terms: universitas, indonesia, dan depok
+
+        Result
+        ------
+        List[(int, str)]
+            List of tuple: elemen pertama adalah score similarity, dan yang
+            kedua adalah nama dokumen.
+            Daftar Top-K dokumen terurut mengecil BERDASARKAN SKOR.
+
+        JANGAN LEMPAR ERROR/EXCEPTION untuk terms yang TIDAK ADA di collection.
+
+        """
+        lists_of_query = self.retrieve(query, debug)
+        def bm25(doc_id, tf, idf):
+            numerator = (k1 + 1) * tf
+            denominator = k1
+            denominator *= (1 - b) + b * self.doc_length[doc_id] / self.average_doc_length
+            denominator += tf
+            return (numerator / denominator) * idf
+        result = self.TaaT(lists_of_query, bm25)
         return self.sort_and_cut(result, k)
 
     def index(self):
