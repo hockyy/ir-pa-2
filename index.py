@@ -155,7 +155,7 @@ class InvertedIndexReader(InvertedIndex):
         postings_list = self.index_file.read(postings_length)
         postings_list = self.postings_encoding.decode(postings_list)
         tf_list = self.index_file.read(tf_length)
-        tf_list = self.postings_encoding.decode(tf_list)
+        tf_list = self.postings_encoding.decode_tf(tf_list)
         return postings_list, tf_list
 
 
@@ -205,7 +205,6 @@ class InvertedIndexWriter(InvertedIndex):
         tf_list: List[Int]
             List of term frequencies
         """
-
         self.terms.append(term)
         for i in range(len(postings_list)):
             doc_id = postings_list[i]

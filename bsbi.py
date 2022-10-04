@@ -234,6 +234,8 @@ class BSBIIndex:
         JANGAN LEMPAR ERROR/EXCEPTION untuk terms yang TIDAK ADA di collection.
 
         """
+        if len(self.term_id_map) == 0 or len(self.doc_id_map) == 0:
+            self.load()
 
         tokenized_query = Cleaner.clean_and_tokenize(query)
         lists_of_query_postings = []
@@ -251,20 +253,29 @@ class BSBIIndex:
         len_postings = len(lists_of_query_postings)
         if len_postings == 0: return []
         lists_of_query_postings.sort(key=len)
-
         result = []
+        print(lists_of_query_tf)
+        print(lists_of_query_postings)
         for i in range(len_postings):
             # w(t, Q) = IDF = log (N / df(t))
             df = len(lists_of_query_postings[i])
             idf = math.log(n / df)
+            current_pairs = []
             for j in range(df):
-                # Count tf
-                lists_of_query_postings[i][j][1] = 1 + math.log(lists_of_query_postings[i][j][1])
-                lists_of_query_postings[i][j][1] *= idf
-            result = sorted_merge_posts_and_tfs(result, lists_of_query_postings[i])
+                # count score in this doc iff lists_of_query_tf[i][j] > 0
+                assert len(lists_of_query_postings) == len(lists_of_query_tf)
+                # print(lists_of_query_postings[i][j], lists_of_query_tf[i][j])
+                current_score = (1 + math.log(lists_of_query_tf[i][j])) * idf
+                current_pairs.append((lists_of_query_postings[i][j], current_score))
+            result = sorted_merge_posts_and_tfs(result, current_pairs)
             # for tmp in result: print(tmp, self.doc_id_map[tmp])
             # print()
-
+        result = sorted(result, key=lambda x: x[1], reverse=True)
+        if (len(result) > k):
+            result = result[:k + 1]
+        for i in range(len(result)):
+            # print(result[i][0], self.doc_id_map[result[i][0]], result[i][1])
+            result[i] = (result[i][1], self.doc_id_map[result[i][0]])
         return result
 
     def index(self):
