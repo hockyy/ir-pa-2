@@ -29,8 +29,7 @@ class IdMap:
 
     def __get_str(self, i):
         """Mengembalikan string yang terasosiasi dengan index i."""
-        # TODO
-        return ""
+        return self.id_to_str[i]
 
     def __get_id(self, s):
         """
@@ -38,8 +37,10 @@ class IdMap:
         Jika s tidak ada pada IdMap, lalu assign sebuah integer id baru dan kembalikan
         integer id baru tersebut.
         """
-        # TODO
-        return 0
+        if s not in self.str_to_id:
+            self.str_to_id[s] = len(self.id_to_str)
+            self.id_to_str.append(s)
+        return self.str_to_id[s]
 
     def __getitem__(self, key):
         """
@@ -61,6 +62,7 @@ class IdMap:
             return self.__get_id(key)
         else:
             raise TypeError
+
 
 def sorted_merge_posts_and_tfs(posts_tfs1, posts_tfs2):
     """
@@ -85,15 +87,40 @@ def sorted_merge_posts_and_tfs(posts_tfs1, posts_tfs2):
     List[(Comparablem, int)]
         Penggabungan yang sudah terurut
     """
-    # TODO
-    return []
+    return_list = []
+    pos1 = pos2 = 0
+    # Lakukan union himpunan
+    while pos1 < len(posts_tfs1) and pos2 < len(posts_tfs2):
+        if posts_tfs1[pos1][0] == posts_tfs2[pos2][0]:
+            # Lakukan penjumlahan bila sama
+            return_list.append(
+                (posts_tfs1[pos1][0],
+                 posts_tfs1[pos1][1] + posts_tfs2[pos2][1])
+            )
+            pos1 += 1
+            pos2 += 1
+        elif posts_tfs1[pos1] < posts_tfs2[pos2]:
+            return_list.append(posts_tfs1[pos1])
+            pos1 += 1
+        else:
+            return_list.append(posts_tfs2[pos2])
+            pos2 += 1
+    # Memasukkan panjang sisanya
+    while pos1 < len(posts_tfs1):
+        return_list.append(posts_tfs1[pos1])
+        pos1 += 1
+    while pos2 < len(posts_tfs2):
+        return_list.append(posts_tfs2[pos2])
+        pos2 += 1
+    return return_list
+
 
 def test(output, expected):
     """ simple function for testing """
     return "PASSED" if output == expected else "FAILED"
 
-if __name__ == '__main__':
 
+if __name__ == '__main__':
     doc = ["halo", "semua", "selamat", "pagi", "semua"]
     term_id_map = IdMap()
     assert [term_id_map[term] for term in doc] == [0, 1, 2, 3, 1], "term_id salah"
@@ -108,5 +135,6 @@ if __name__ == '__main__':
     doc_id_map = IdMap()
     assert [doc_id_map[docname] for docname in docs] == [0, 1, 2], "docs_id salah"
 
-    assert sorted_merge_posts_and_tfs([(1, 34), (3, 2), (4, 23)], \
-                                      [(1, 11), (2, 4), (4, 3 ), (6, 13)]) == [(1, 45), (2, 4), (3, 2), (4, 26), (6, 13)], "sorted_merge_posts_and_tfs salah"
+    assert sorted_merge_posts_and_tfs([(1, 34), (3, 2), (4, 23)],
+                                      [(1, 11), (2, 4), (4, 3), (6, 13)]) == [(1, 45), (2, 4), (3, 2), (4, 26), (
+        6, 13)], "sorted_merge_posts_and_tfs salah"
