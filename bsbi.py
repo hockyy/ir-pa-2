@@ -122,8 +122,8 @@ class BSBIIndex:
         td_pairs = []
         # print(f"Currently processing... {block_path}")
         for doc_file_name in next(os.walk(block_path))[2]:
-            current_doc_id = self.doc_id_map[doc_file_name]
-            doc_path = os.path.join(block_path, doc_file_name)
+            doc_path = f'./{os.path.join(block_path, doc_file_name)}'
+            current_doc_id = self.doc_id_map[doc_path]
             with open(doc_path, "r") as f:
                 tokenized_words = Cleaner.clean_and_tokenize(f.read())
                 for token in tokenized_words:
@@ -198,7 +198,7 @@ class BSBIIndex:
                 curr, postings, tf_list = t, postings_, tf_list_
         merged_index.append(curr, postings, tf_list)
 
-    def retrieve_tfidf(self, query, k=10):
+    def retrieve_tfidf(self, query, k=10, debug = False):
         """
         Melakukan Ranked Retrieval dengan skema TaaT (Term-at-a-Time).
         Method akan mengembalikan top-K retrieval results.
@@ -238,8 +238,9 @@ class BSBIIndex:
             self.load()
 
         tokenized_query = Cleaner.clean_and_tokenize(query)
-        print("tokenized into: ")
-        print(tokenized_query)
+        if(debug):
+            print("tokenized into: ")
+            print(tokenized_query)
         lists_of_query = []
         n = -1
         with InvertedIndexReader(self.index_name, self.postings_encoding, self.output_dir) as merged_index:
