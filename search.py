@@ -14,8 +14,8 @@ queries = ["alkylated with radioactive iodoacetate",
 for query in queries:
     print("Query  : ", query)
     K = 10
-    result = BSBI_instance.retrieve_tfidf(query, k=K, optimize=False)
-    result2 = BSBI_instance.retrieve_tfidf(query, k=K, optimize=True)
+    result = BSBI_instance.retrieve_bm25(query, k=K, optimize=False)
+    result2 = BSBI_instance.retrieve_bm25(query, k=K, optimize=True)
     print("Results:")
     print(f"{'Document Name':30} Score")
     assert len(result) == len(result2), "Optimization caused different result"
