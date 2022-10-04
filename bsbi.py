@@ -1,7 +1,7 @@
 ## Referensi:
 # https://www.analyticssteps.com/blogs/nltk-python-tutorial-beginners
 # https://www.nltk.org/howto/stem.html
-
+import functools
 import os
 import pickle
 import contextlib
@@ -20,6 +20,7 @@ from nltk.stem.porter import *
 from nltk import word_tokenize
 from string import punctuation
 
+INT_MAX = 1e9
 punctuation = list(punctuation)
 
 nltk.download('stopwords')
@@ -223,7 +224,7 @@ class BSBIIndex:
 
         return lists_of_query
 
-    def TaaT(self, lists_of_query, scoreFunction):
+    def TaaT(self, lists_of_query, score_function):
         n = len(self.doc_length)
         result = []
         len_postings = len(lists_of_query)
@@ -235,7 +236,7 @@ class BSBIIndex:
                 # count score in this doc iff lists_of_query_tf[i][j] > 0
                 assert len(lists_of_query[i][0]) == len(lists_of_query[i][1])
                 # print(lists_of_query[0][i][j], lists_of_query_tf[i][j])
-                current_score = scoreFunction(
+                current_score = score_function(
                     doc_id=lists_of_query[i][0][j],
                     tf=lists_of_query[i][1][j],
                     idf=idf
@@ -243,6 +244,99 @@ class BSBIIndex:
                 current_pairs.append((lists_of_query[i][0][j], current_score))
             result = sorted_merge_posts_and_tfs(result, current_pairs)
         return result
+
+    def WandTopK(self, lists_of_query, score_function):
+        n = len(lists_of_query)
+        N = len(self.doc_length)
+
+        # order[i][0] adalah term yang ditunjuk
+        # order[i][1] adalah posisi pointernya untuk posting list term ini
+        # Awalnya semuanya di 0
+        order = [[i, 0] for i in range(n)]
+
+        def get_doc_id(order_pair):
+            return lists_of_query[order_pair[0]][0][order_pair[1]]
+
+        def get_tf(order_pair):
+            return lists_of_query[order_pair[0]][1][order_pair[1]]
+
+        # Compute upper bound
+        upperbound_score = []
+        idf = []
+        for i in range(n):
+            idf[i] = math.log(N / len(lists_of_query[i][0]))
+            max_arg = 0
+
+            # Karena sebanding, cukup bandingkan tf doang
+            for j in range(len(lists_of_query[i][0])):
+                if get_tf((i, max_arg)) < get_tf((i, j)):
+                    max_arg = j
+
+            upperbound_score.append(score_function(
+                doc_id=get_doc_id((i, max_arg)),
+                tf=get_doc_id((i, max_arg)),
+                idf=idf[i]
+            ))
+
+            lists_of_query[i][0].append(INT_MAX)
+            lists_of_query[i][1].append(INT_MAX)
+
+        # Heap is (-score, doc_id), biar top kebalik scorenya minus
+        topK = [(0, -1) for _ in range(n)]
+        print(topK)
+        cur_doc = -1
+        full_eval = 0
+
+        def readjust(order, minimum_doc_id):
+            # Fungsi ini akan menggeser pointer setiap posting list
+            # sehingga mencapai minimum doc id tertentu
+            for idx in order:
+                if (get_doc_id(idx) >= minimum_doc_id): break
+                while (get_doc_id(idx) < minimum_doc_id):
+                    idx[1] += 1
+
+        while True:
+            order = sorted(order, key=get_doc_id)
+            threshold = topK[0][0]
+            prefix_sum = 0
+
+            pivot = INT_MAX
+            for idx in order:
+                prefix_sum += upperbound_score[idx[1]]
+                if prefix_sum >= threshold:
+                    pivot = get_doc_id(idx)
+                    break
+            if pivot == INT_MAX:
+                break
+
+            if get_doc_id(order[0]) == pivot:
+                # Fully evaluating
+                full_eval += 1
+                cur_doc = pivot
+                total_score = 0
+                for idx in order:
+                    if get_doc_id(idx) != pivot: break
+                    total_score += score_function(
+                        doc_id=get_doc_id(idx),
+                        tf=get_tf(idx),
+                        idf=idf[idx[1]]
+                    )
+                heapq.heappush(topK, (-total_score, pivot))
+                heapq.heappop(topK)
+                readjust(order, cur_doc + 1)
+            else:
+                readjust(order, pivot)
+            break
+
+        # Selama tidak berguna pop saja
+        while topK[0][1] == -1:
+            heapq.heappop(topK)
+
+        return sorted(
+            [(-score, self.doc_id_map[doc_id]) for [score, doc_id] in topK],
+            key=lambda x: x[1],
+            reverse=True
+        )
 
     def sort_and_cut(self, result, k):
         result = sorted(result, key=lambda x: x[1], reverse=True)
@@ -253,7 +347,7 @@ class BSBIIndex:
             result[i] = (result[i][1], self.doc_id_map[result[i][0]])
         return result
 
-    def retrieve_tfidf(self, query, k=10, debug=False):
+    def retrieve_tfidf(self, query, k=10, optimize=False, debug=False):
         """
         Melakukan Ranked Retrieval dengan skema TaaT (Term-at-a-Time).
         Method akan mengembalikan top-K retrieval results.
@@ -294,10 +388,14 @@ class BSBIIndex:
         def tfidf(doc_id, tf, idf):
             return (1 + math.log(tf)) * idf
 
-        result = self.TaaT(lists_of_query, tfidf)
-        return self.sort_and_cut(result, k)
+        result = []
+        if not optimize:
+            result = self.TaaT(lists_of_query, tfidf)
+            return self.sort_and_cut(result, k)
+        else:
+            return self.WandTopK(lists_of_query, tfidf)
 
-    def retrieve_bm25(self, query, k=10, k1=1.6, b=0.75, debug=False):
+    def retrieve_bm25(self, query, k=10, optimize=False, k1=1.6, b=0.75, debug=False):
         """
         Melakukan Ranked Retrieval dengan skema TaaT (Term-at-a-Time).
         Method akan mengembalikan top-K retrieval results.
@@ -333,14 +431,20 @@ class BSBIIndex:
 
         """
         lists_of_query = self.retrieve(query, debug)
+
         def bm25(doc_id, tf, idf):
             numerator = (k1 + 1) * tf
             denominator = k1
             denominator *= (1 - b) + b * self.doc_length[doc_id] / self.average_doc_length
             denominator += tf
             return (numerator / denominator) * idf
-        result = self.TaaT(lists_of_query, bm25)
-        return self.sort_and_cut(result, k)
+
+        result = []
+        if not optimize:
+            result = self.TaaT(lists_of_query, bm25)
+            return self.sort_and_cut(result, k)
+        else:
+            return self.WandTopK(lists_of_query, bm25)
 
     def index(self):
         """
