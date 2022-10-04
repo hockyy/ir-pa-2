@@ -172,8 +172,11 @@ if __name__ == '__main__':
         return bm25
 
 
-    eval(qrels, "TF Doang", BSBI_instance.retrieve_tf)
+    eval(qrels, "TF", BSBI_instance.retrieve_tf)
+    eval(qrels, "Boolean TF", BSBI_instance.retrieve_boolean_tf)
+    eval(qrels, "Sublinear TF", BSBI_instance.retrieve_sublinear_tf)
     eval(qrels, "TF-IDF", BSBI_instance.retrieve_tfidf)
+    eval(qrels, "TF-Prob IDF", BSBI_instance.retrieve_tf_probidf)
     import numpy as np
     from tqdm import tqdm
     # 1.2 <= k1 <= 2 dan b = 0.75
