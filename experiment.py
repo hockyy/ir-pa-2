@@ -171,7 +171,6 @@ if __name__ == '__main__':
 
         return bm25
 
-
     eval(qrels, "TF", BSBI_instance.retrieve_tf)
     eval(qrels, "Boolean TF", BSBI_instance.retrieve_boolean_tf)
     eval(qrels, "Sublinear TF", BSBI_instance.retrieve_sublinear_tf)
