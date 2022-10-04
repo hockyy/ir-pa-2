@@ -63,6 +63,7 @@ class BSBIIndex:
         self.output_dir = output_dir
         self.index_name = index_name
         self.postings_encoding = postings_encoding
+        self.loaded = False
 
         # Untuk menyimpan nama-nama file dari semua intermediate inverted index
         self.intermediate_indices = []
@@ -198,7 +199,38 @@ class BSBIIndex:
                 curr, postings, tf_list = t, postings_, tf_list_
         merged_index.append(curr, postings, tf_list)
 
-    def retrieve_tfidf(self, query, k=10, debug = False):
+    def retrieve(self, query, debug=False):
+        if not self.loaded:
+            self.load()
+            self.loaded = 1
+            
+        tokenized_query = Cleaner.clean_and_tokenize(query)
+        if (debug):
+            print("tokenized into: ")
+            print(tokenized_query)
+        lists_of_query = []
+
+        n = -1
+        with InvertedIndexReader(self.index_name, self.postings_encoding, self.output_dir) as merged_index:
+            n = len(merged_index.doc_length)
+            for token in tqdm(tokenized_query):
+                if token not in self.term_id_map: continue
+                lists_of_query.append(merged_index.get_postings_list(self.term_id_map[token]))
+
+        lists_of_query.sort(key=lambda x: len(x[0]))
+
+        return n, lists_of_query
+
+    def sort_and_cut(self, result, k):
+        result = sorted(result, key=lambda x: x[1], reverse=True)
+        if len(result) > k:
+            result = result[:k + 1]
+        for i in range(len(result)):
+            # print(result[i][0], self.doc_id_map[result[i][0]], result[i][1])
+            result[i] = (result[i][1], self.doc_id_map[result[i][0]])
+        return result
+
+    def retrieve_tfidf(self, query, k=10, debug=False):
         """
         Melakukan Ranked Retrieval dengan skema TaaT (Term-at-a-Time).
         Method akan mengembalikan top-K retrieval results.
@@ -234,26 +266,9 @@ class BSBIIndex:
         JANGAN LEMPAR ERROR/EXCEPTION untuk terms yang TIDAK ADA di collection.
 
         """
-        if len(self.term_id_map) == 0 or len(self.doc_id_map) == 0:
-            self.load()
-
-        tokenized_query = Cleaner.clean_and_tokenize(query)
-        if(debug):
-            print("tokenized into: ")
-            print(tokenized_query)
-        lists_of_query = []
-        n = -1
-        with InvertedIndexReader(self.index_name, self.postings_encoding, self.output_dir) as merged_index:
-            n = len(merged_index.doc_length)
-            for token in tqdm(tokenized_query):
-                if token not in self.term_id_map: continue
-                lists_of_query.append(merged_index.get_postings_list(self.term_id_map[token]))
-
-        assert n != -1
-        len_postings = len(lists_of_query)
-        if len_postings == 0: return []
-        lists_of_query.sort(key=lambda x: len(x[0]))
+        n, lists_of_query = self.retrieve(query, debug)
         result = []
+        len_postings = len(lists_of_query)
         # print(lists_of_query)
         for i in range(len_postings):
             # w(t, Q) = IDF = log (N / df(t))
@@ -270,13 +285,7 @@ class BSBIIndex:
             result = sorted_merge_posts_and_tfs(result, current_pairs)
             # for tmp in result: print(tmp, self.doc_id_map[tmp])
             # print()
-        result = sorted(result, key=lambda x: x[1], reverse=True)
-        if (len(result) > k):
-            result = result[:k + 1]
-        for i in range(len(result)):
-            # print(result[i][0], self.doc_id_map[result[i][0]], result[i][1])
-            result[i] = (result[i][1], self.doc_id_map[result[i][0]])
-        return result
+        return self.sort_and_cut(result, k)
 
     def index(self):
         """
