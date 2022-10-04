@@ -215,7 +215,7 @@ class BSBIIndex:
         lists_of_query = []
 
         with InvertedIndexReader(self.index_name, self.postings_encoding, self.output_dir) as merged_index:
-            for token in tqdm(tokenized_query):
+            for token in tokenized_query:
                 if token not in self.term_id_map: continue
                 lists_of_query.append(merged_index.get_postings_list(self.term_id_map[token]))
 
