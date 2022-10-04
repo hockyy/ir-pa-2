@@ -141,7 +141,7 @@ class BSBIIndex:
     def invert_write(self, td_pairs, index):
         """
         Melakukan inversion td_pairs (list of <termID, docID> pairs) dan
-        menyimpan mereka ke index. Disini diterapkan konsep BSBI dimana 
+        menyimpan mereka ke index. Disini diterapkan konsep BSBI dimana
         hanya di-mantain satu dictionary besar untuk keseluruhan block.
         Namun dalam teknik penyimpanannya digunakan srategi dari SPIMI
         yaitu penggunaan struktur data hashtable (dalam Python bisa
@@ -228,7 +228,7 @@ class BSBIIndex:
         # lists_of_query[i][1] adalah tf list untuk term ke i
         return lists_of_query
 
-    def TaaT(self, lists_of_query, score_function):
+    def TaaT(self, lists_of_query, score_function, idf_function):
         n = len(self.doc_length)
         result = []
         number_of_terms = len(lists_of_query)
@@ -236,7 +236,7 @@ class BSBIIndex:
         for i in range(number_of_terms):
             # df adalah panjang posting list untuk term i
             df = len(lists_of_query[i][0])
-            idf = math.log(n / df)
+            idf = idf_function(N=n, DF=df)
             current_pairs = []
             for j in range(df):
                 # count score in this doc iff lists_of_query_tf[i][j] > 0
@@ -254,7 +254,7 @@ class BSBIIndex:
         return result
 
     # WAND Top K Retrieval Algorithm
-    def WandTopK(self, lists_of_query, K, score_function):
+    def WandTopK(self, lists_of_query, K, score_function, idf_function):
         INT_MAX = 1e9
         n = len(lists_of_query)
         N = len(self.doc_length)
@@ -275,7 +275,7 @@ class BSBIIndex:
         idf = []
         for i in range(n):
             # Precompute idf
-            idf.append(math.log(N / len(lists_of_query[i][0])))
+            idf.append(idf_function(N=N, DF=len(lists_of_query[i][0])))
             max_arg = 0
 
             # Karena sebanding, cukup bandingkan tf doang
@@ -404,11 +404,14 @@ class BSBIIndex:
         def tfidf(doc_id, tf, idf):
             return (1 + math.log(tf)) * idf
 
+        def idf_func(N, DF):
+            return math.log(N / DF)
+
         if not optimize:
-            result = self.TaaT(lists_of_query, tfidf)
+            result = self.TaaT(lists_of_query, tfidf, idf_func)
             return self.sort_and_cut(result, k)
         else:
-            return self.WandTopK(lists_of_query, k, tfidf)
+            return self.WandTopK(lists_of_query, k, tfidf, idf_func)
 
     def retrieve_bm25(self, query, k=10, optimize=True, k1=1.6, b=0.75, debug=False):
         """
@@ -456,11 +459,119 @@ class BSBIIndex:
             denominator += tf
             return (numerator / denominator) * idf
 
+        def idf_func(N, DF):
+            return math.log(N / DF)
+
         if not optimize:
-            result = self.TaaT(lists_of_query, bm25)
+            result = self.TaaT(lists_of_query, bm25, idf_func)
             return self.sort_and_cut(result, k)
         else:
-            return self.WandTopK(lists_of_query, k, bm25)
+            return self.WandTopK(lists_of_query, k, bm25, idf_func)
+
+    def retrieve_alt2_bm25(self, query, k=10, optimize=True, k1=1.6, b=0.75, debug=False):
+        """
+        Melakukan Ranked Retrieval dengan skema TaaT (Term-at-a-Time).
+        Method akan mengembalikan top-K retrieval results.
+
+        w(t, D) = ((k1 + 1) * tf(t, D)) / (k1 * ((1 - b) + b * docsLength(D) / averageDocsLength) + tf(t, D))
+
+        w(t, Q) = IDF = log ((N - df(t) + 0.5) / (df(t) + 0.5))
+
+        Score = untuk setiap term di query, akumulasikan w(t, Q) * w(t, D).
+                (tidak perlu dinormalisasi dengan panjang dokumen)
+
+        catatan:
+            1. informasi DF(t) ada di dictionary postings_dict pada merged index
+            2. informasi TF(t, D) ada di tf_li
+            3. informasi N bisa didapat dari doc_length pada merged index, len(doc_length)
+
+        Parameters
+        ----------
+        query: str
+            Query tokens yang dipisahkan oleh spasi
+
+            contoh: Query "universitas indonesia depok" artinya ada
+            tiga terms: universitas, indonesia, dan depok
+
+        Result
+        ------
+        List[(int, str)]
+            List of tuple: elemen pertama adalah score similarity, dan yang
+            kedua adalah nama dokumen.
+            Daftar Top-K dokumen terurut mengecil BERDASARKAN SKOR.
+
+        JANGAN LEMPAR ERROR/EXCEPTION untuk terms yang TIDAK ADA di collection.
+
+        """
+        lists_of_query = self.retrieve(query, debug)
+
+        # Fungsi untuk BM25
+
+        def bm25(doc_id, tf, idf):
+            numerator = (k1 + 1) * tf
+            denominator = k1
+            denominator *= (1 - b) + b * self.doc_length[doc_id] / self.average_doc_length
+            denominator += tf
+            return (numerator / denominator) * idf
+
+        def idf_func(N, DF):
+            return math.log((N - DF + 0.5) / (DF + 0.5))
+
+        if not optimize:
+            result = self.TaaT(lists_of_query, bm25, idf_func)
+            return self.sort_and_cut(result, k)
+        else:
+            return self.WandTopK(lists_of_query, k, bm25, idf_func)
+
+    def retrieve_tf(self, query, k=10, optimize=True, debug=False):
+        """
+        Melakukan Ranked Retrieval dengan skema TaaT (Term-at-a-Time).
+        Method akan mengembalikan top-K retrieval results.
+
+        w(t, D) = (1 + log tf(t, D))       jika tf(t, D) > 0
+                = 0                        jika sebaliknya
+
+        w(t, Q) = IDF = log (N / df(t))
+
+        Score = untuk setiap term di query, akumulasikan w(t, Q) * w(t, D).
+                (tidak perlu dinormalisasi dengan panjang dokumen)
+
+        catatan:
+            1. informasi DF(t) ada di dictionary postings_dict pada merged index
+            2. informasi TF(t, D) ada di tf_li
+            3. informasi N bisa didapat dari doc_length pada merged index, len(doc_length)
+
+        Parameters
+        ----------
+        query: str
+            Query tokens yang dipisahkan oleh spasi
+
+            contoh: Query "universitas indonesia depok" artinya ada
+            tiga terms: universitas, indonesia, dan depok
+
+        Result
+        ------
+        List[(int, str)]
+            List of tuple: elemen pertama adalah score similarity, dan yang
+            kedua adalah nama dokumen.
+            Daftar Top-K dokumen terurut mengecil BERDASARKAN SKOR.
+
+        JANGAN LEMPAR ERROR/EXCEPTION untuk terms yang TIDAK ADA di collection.
+
+        """
+        lists_of_query = self.retrieve(query, debug)
+
+        def tfidf(doc_id, tf, idf):
+            return (1 + math.log(tf))
+
+        def idf_func(N, DF):
+            return 1
+
+        if not optimize:
+            result = self.TaaT(lists_of_query, tfidf, idf_func)
+            return self.sort_and_cut(result, k)
+        else:
+            return self.WandTopK(lists_of_query, k, tfidf, idf_func)
 
     def index(self):
         """
