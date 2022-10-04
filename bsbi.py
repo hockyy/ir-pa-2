@@ -238,6 +238,8 @@ class BSBIIndex:
             self.load()
 
         tokenized_query = Cleaner.clean_and_tokenize(query)
+        print("tokenized into: ")
+        print(tokenized_query)
         lists_of_query = []
         n = -1
         with InvertedIndexReader(self.index_name, self.postings_encoding, self.output_dir) as merged_index:
@@ -247,22 +249,23 @@ class BSBIIndex:
                 lists_of_query.append(merged_index.get_postings_list(self.term_id_map[token]))
 
         assert n != -1
-        len_postings = len(lists_of_query[0])
+        len_postings = len(lists_of_query)
         if len_postings == 0: return []
         lists_of_query.sort(key=lambda x: len(x[0]))
         result = []
         # print(lists_of_query)
         for i in range(len_postings):
             # w(t, Q) = IDF = log (N / df(t))
-            df = len(lists_of_query[0][i])
+            # print(lists_of_query[i])
+            df = len(lists_of_query[i][0])
             idf = math.log(n / df)
             current_pairs = []
             for j in range(df):
                 # count score in this doc iff lists_of_query_tf[i][j] > 0
-                assert len(lists_of_query[0]) == len(lists_of_query[1])
+                assert len(lists_of_query[i][0]) == len(lists_of_query[i][1])
                 # print(lists_of_query[0][i][j], lists_of_query_tf[i][j])
-                current_score = (1 + math.log(lists_of_query[1][i][j])) * idf
-                current_pairs.append((lists_of_query[0][i][j], current_score))
+                current_score = (1 + math.log(lists_of_query[i][1][j])) * idf
+                current_pairs.append((lists_of_query[i][0][j], current_score))
             result = sorted_merge_posts_and_tfs(result, current_pairs)
             # for tmp in result: print(tmp, self.doc_id_map[tmp])
             # print()
