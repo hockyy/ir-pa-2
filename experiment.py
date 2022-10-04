@@ -155,7 +155,7 @@ if __name__ == '__main__':
     assert qrels["Q1"][300] == 0, "qrels salah"
 
 
-    def bm25_generator(k1=1.6, b=0.75, optimize=False):
+    def bm25_generator(k1=1.6, b=0.75, optimize=True):
         def bm25(query, k=10):
             return BSBI_instance.retrieve_bm25(query, k, optimize, k1, b)
 

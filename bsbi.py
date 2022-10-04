@@ -274,7 +274,7 @@ class BSBIIndex:
 
             upperbound_score.append(score_function(
                 doc_id=get_doc_id((i, max_arg)),
-                tf=get_doc_id((i, max_arg)),
+                tf=get_tf((i, max_arg)),
                 idf=idf[i]
             ))
 
@@ -283,7 +283,6 @@ class BSBIIndex:
 
         # Heap is (-score, doc_id), biar top kebalik scorenya minus
         topK = [(0, -1) for _ in range(K)]
-        cur_doc = -1
         full_eval = 0
 
         def readjust(order, minimum_doc_id):
@@ -312,7 +311,6 @@ class BSBIIndex:
                 # print(f"Fully evaluating {pivot}")
                 # Fully evaluating
                 full_eval += 1
-                cur_doc = pivot
                 total_score = 0
                 for idx in order:
                     if get_doc_id(idx) != pivot: break
@@ -323,7 +321,7 @@ class BSBIIndex:
                     )
                 heapq.heappush(topK, (total_score, pivot))
                 heapq.heappop(topK)
-                readjust(order, cur_doc + 1)
+                readjust(order, pivot + 1)
             else:
                 readjust(order, pivot)
 
@@ -347,7 +345,7 @@ class BSBIIndex:
             result[i] = (result[i][1], self.doc_id_map[result[i][0]])
         return result
 
-    def retrieve_tfidf(self, query, k=10, optimize=False, debug=False):
+    def retrieve_tfidf(self, query, k=10, optimize=True, debug=False):
         """
         Melakukan Ranked Retrieval dengan skema TaaT (Term-at-a-Time).
         Method akan mengembalikan top-K retrieval results.
@@ -395,7 +393,7 @@ class BSBIIndex:
         else:
             return self.WandTopK(lists_of_query, k, tfidf)
 
-    def retrieve_bm25(self, query, k=10, optimize=False, k1=1.6, b=0.75, debug=False):
+    def retrieve_bm25(self, query, k=10, optimize=True, k1=1.6, b=0.75, debug=False):
         """
         Melakukan Ranked Retrieval dengan skema TaaT (Term-at-a-Time).
         Method akan mengembalikan top-K retrieval results.
