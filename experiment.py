@@ -162,5 +162,10 @@ if __name__ == '__main__':
         return bm25
 
     eval(qrels, "TF-IDF", BSBI_instance.retrieve_tfidf)
-    eval(qrels, "BM25, k1 = 1.6, b = 0.75", bm25_generator())
-    eval(qrels, "BM25, k1 = 1.5, b = 0.8", bm25_generator(1.5, 0.8))
+    import numpy as np
+    # 1.2 <= k1 <= 2 dan b = 0.75
+    for i in np.arange(1.2, 2.2, 0.1):
+        for j in np.arange(0.5, 1, 0.05):
+            eval(qrels, f"BM25, k1 = {i}, b = {j}", bm25_generator(i, j))
+    # eval(qrels, "BM25, k1 = 1.6, b = 0.75", bm25_generator())
+    # eval(qrels, "BM25, k1 = 1.5, b = 0.8", bm25_generator(1.5, 0.8))

@@ -16,17 +16,15 @@ from tqdm import tqdm
 import nltk
 from nltk.corpus import stopwords
 from nltk.stem.snowball import SnowballStemmer
-from nltk.stem.porter import *
 from nltk import word_tokenize
 from string import punctuation
 
-INT_MAX = 1e9
 punctuation = list(punctuation)
 
 nltk.download('stopwords')
 nltk.download('punkt')
 
-
+# Cleaner methods menggunakan nltk
 class Cleaner:
     # stemmer = PorterStemmer()
     stemmer = SnowballStemmer("english")
@@ -86,6 +84,7 @@ class BSBIIndex:
             self.term_id_map = pickle.load(f)
         with open(os.path.join(self.output_dir, 'docs.dict'), 'rb') as f:
             self.doc_id_map = pickle.load(f)
+        # Menyimpan doc_length, yaitu dictionary yang memetakan dari doc id ke panjang dokumen
         with InvertedIndexReader(self.index_name, self.postings_encoding, self.output_dir) as merged_index:
             self.doc_length = merged_index.doc_length
             self.average_doc_length = merged_index.average_doc_length
@@ -127,7 +126,7 @@ class BSBIIndex:
         block_path = os.path.join(self.data_dir, block_dir_relative)
 
         td_pairs = []
-        # print(f"Currently processing... {block_path}")
+
         for doc_file_name in next(os.walk(block_path))[2]:
             doc_path = f'./{os.path.join(block_path, doc_file_name)}'
             current_doc_id = self.doc_id_map[doc_path]
@@ -206,9 +205,12 @@ class BSBIIndex:
         merged_index.append(curr, postings, tf_list)
 
     def retrieve(self, query, debug=False):
+
+        # Lazy load sekali saja untuk menyimpan term id map, doc id map, serta doc length dictionary
         if not self.loaded:
             self.load()
             self.loaded = 1
+
         tokenized_query = Cleaner.clean_and_tokenize(query)
         if (debug):
             print("tokenized into: ")
@@ -222,13 +224,17 @@ class BSBIIndex:
 
         lists_of_query.sort(key=lambda x: len(x[0]))
 
+        # lists_of_query[i][0] adalah postings list untuk term ke i
+        # lists_of_query[i][1] adalah tf list untuk term ke i
         return lists_of_query
 
     def TaaT(self, lists_of_query, score_function):
         n = len(self.doc_length)
         result = []
-        len_postings = len(lists_of_query)
-        for i in range(len_postings):
+        number_of_terms = len(lists_of_query)
+        # Iterasi setiap terms
+        for i in range(number_of_terms):
+            # df adalah panjang posting list untuk term i
             df = len(lists_of_query[i][0])
             idf = math.log(n / df)
             current_pairs = []
@@ -241,11 +247,15 @@ class BSBIIndex:
                     tf=lists_of_query[i][1][j],
                     idf=idf
                 )
+                # Susun dalam tuple doc id, score
                 current_pairs.append((lists_of_query[i][0][j], current_score))
+            # Small to large, merge dari yang paling pendek postings list nya
             result = sorted_merge_posts_and_tfs(result, current_pairs)
         return result
 
+    # WAND Top K Retrieval Algorithm
     def WandTopK(self, lists_of_query, K, score_function):
+        INT_MAX = 1e9
         n = len(lists_of_query)
         N = len(self.doc_length)
 
@@ -264,6 +274,7 @@ class BSBIIndex:
         upperbound_score = []
         idf = []
         for i in range(n):
+            # Precompute idf
             idf.append(math.log(N / len(lists_of_query[i][0])))
             max_arg = 0
 
@@ -281,23 +292,25 @@ class BSBIIndex:
             lists_of_query[i][0].append(INT_MAX)
             lists_of_query[i][1].append(INT_MAX)
 
-        # Heap is (-score, doc_id), biar top kebalik scorenya minus
-        topK = [(0, -1) for _ in range(K)]
+        # top_k adalah sebuah min Heap
+        top_k = [(0, -1) for _ in range(K)]
+        # full_eval
         full_eval = 0
 
-        def readjust(order, minimum_doc_id):
+        def readjust(next_order, minimum_doc_id):
             # Fungsi ini akan menggeser pointer setiap posting list
             # sehingga mencapai minimum doc id tertentu
-            for idx in order:
-                if (get_doc_id(idx) >= minimum_doc_id): break
-                while (get_doc_id(idx) < minimum_doc_id):
+            for idx in next_order:
+                if get_doc_id(idx) >= minimum_doc_id: break
+                while get_doc_id(idx) < minimum_doc_id:
                     idx[1] += 1
 
         while True:
             order = sorted(order, key=get_doc_id)
-            threshold = topK[0][0]
+            threshold = top_k[0][0]
             prefix_sum = 0
 
+            # Pivot merupakan doc id untuk prefix sum pertama yang >= threshold setelah di sort
             pivot = INT_MAX
             for idx in order:
                 prefix_sum += upperbound_score[idx[0]]
@@ -307,11 +320,15 @@ class BSBIIndex:
             if pivot == INT_MAX:
                 break
 
+            # Karena pivot sama dengan doc id dari order[0], yang pertama,
+            # maka fully evaluated dan geser ke pivot + 1
+            # Selain itu, geser sampai pivot
             if get_doc_id(order[0]) == pivot:
                 # print(f"Fully evaluating {pivot}")
                 # Fully evaluating
                 full_eval += 1
                 total_score = 0
+                # Untuk setiap yang sama dengan pivot, evaluasi total score saat ini
                 for idx in order:
                     if get_doc_id(idx) != pivot: break
                     total_score += score_function(
@@ -319,24 +336,25 @@ class BSBIIndex:
                         tf=get_tf(idx),
                         idf=idf[idx[0]]
                     )
-                heapq.heappush(topK, (total_score, pivot))
-                heapq.heappop(topK)
+                # Push ke heap total score dan pivot saat ini
+                heapq.heappush(top_k, (total_score, pivot))
+                heapq.heappop(top_k)
                 readjust(order, pivot + 1)
             else:
                 readjust(order, pivot)
 
         # Selama tidak berguna pop saja
-        while len(topK) and topK[0][1] == -1:
-            heapq.heappop(topK)
-        print(f"Evaluated {full_eval} scores")
+        while len(top_k) and top_k[0][1] == -1:
+            heapq.heappop(top_k)
+        # print(f"Evaluated {full_eval} scores")
         return sorted(
-            [(score, self.doc_id_map[doc_id]) for [score, doc_id] in topK],
+            [(score, self.doc_id_map[doc_id]) for [score, doc_id] in top_k],
             key=lambda x: x[0],
             reverse=True
         )
 
     def sort_and_cut(self, result, k):
-        print(f"Evaluated {len(result)} scores")
+        # print(f"Evaluated {len(result)} scores")
         result = sorted(result, key=lambda x: x[1], reverse=True)
         if len(result) > k:
             result = result[:k]
@@ -386,7 +404,6 @@ class BSBIIndex:
         def tfidf(doc_id, tf, idf):
             return (1 + math.log(tf)) * idf
 
-        result = []
         if not optimize:
             result = self.TaaT(lists_of_query, tfidf)
             return self.sort_and_cut(result, k)
@@ -430,6 +447,8 @@ class BSBIIndex:
         """
         lists_of_query = self.retrieve(query, debug)
 
+        # Fungsi untuk BM25
+
         def bm25(doc_id, tf, idf):
             numerator = (k1 + 1) * tf
             denominator = k1
@@ -437,7 +456,6 @@ class BSBIIndex:
             denominator += tf
             return (numerator / denominator) * idf
 
-        result = []
         if not optimize:
             result = self.TaaT(lists_of_query, bm25)
             return self.sort_and_cut(result, k)
