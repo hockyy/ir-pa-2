@@ -236,7 +236,7 @@ class BSBIIndex:
                 assert len(lists_of_query[i][0]) == len(lists_of_query[i][1])
                 # print(lists_of_query[0][i][j], lists_of_query_tf[i][j])
                 current_score = scoreFunction(
-                    docId=lists_of_query[i][0][j],
+                    doc_id=lists_of_query[i][0][j],
                     tf=lists_of_query[i][1][j],
                     idf=idf
                 )
@@ -291,7 +291,7 @@ class BSBIIndex:
         """
         lists_of_query = self.retrieve(query, debug)
 
-        def tfidf(docId, tf, idf):
+        def tfidf(doc_id, tf, idf):
             return (1 + math.log(tf)) * idf
 
         result = self.TaaT(lists_of_query, tfidf)

@@ -13,7 +13,8 @@ queries = ["alkylated with radioactive iodoacetate",
 
 for query in queries:
     print("Query  : ", query)
-    result = BSBI_instance.retrieve_tfidf(query, k=10)
+    result = BSBI_instance.retrieve_bm25(query, k=10)
+    # result = BSBI_instance.retrieve_tfidf(query, k=10)
     print("Results:")
     print(f"{'Document Name':30} Score")
     for (score, doc) in result:
