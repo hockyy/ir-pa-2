@@ -135,6 +135,17 @@ if __name__ == '__main__':
     doc_id_map = IdMap()
     assert [doc_id_map[docname] for docname in docs] == [0, 1, 2], "docs_id salah"
 
-    assert sorted_merge_posts_and_tfs([(1, 34), (3, 2), (4, 23)],
-                                      [(1, 11), (2, 4), (4, 3), (6, 13)]) == [(1, 45), (2, 4), (3, 2), (4, 26), (
-        6, 13)], "sorted_merge_posts_and_tfs salah"
+    assert sorted_merge_posts_and_tfs(
+        [(1, 34), (3, 2), (4, 23)],
+        [(1, 11), (2, 4), (4, 3), (6, 13)]) == \
+           [(1, 45), (2, 4), (3, 2), (4, 26), (6, 13)], "sorted_merge_posts_and_tfs salah"
+
+    assert sorted_merge_posts_and_tfs(
+        [(1, 34)],
+        [(1, 11), (2, 4), (4, 3), (6, 13)]) == \
+           [(1, 45), (2, 4), (4, 3), (6, 13)], "sorted_merge_posts_and_tfs salah"
+
+    assert sorted_merge_posts_and_tfs(
+        [(1, 34), (3, 2), (4, 23)],
+        [(1, 11)]) == \
+           [(1, 45), (3, 2), (4, 23)], "sorted_merge_posts_and_tfs salah"
