@@ -150,8 +150,13 @@ class VBEPostings:
         bytes
             bytearray yang merepresentasikan urutan integer di postings_list
         """
-        # TODO
-        return None
+        if len(postings_list) == 0: return []
+
+        gap_based_list = [postings_list[0]]
+        for i in range(1, len(postings_list)):
+            gap_based_list.append(postings_list[i] - postings_list[i - 1])
+        # print(gap_based_list)
+        return VBEPostings.vb_encode(gap_based_list)
 
     @staticmethod
     def encode_tf(tf_list):
@@ -177,8 +182,18 @@ class VBEPostings:
         Decoding sebuah bytestream yang sebelumnya di-encode dengan
         variable-byte encoding.
         """
-        # TODO
-        return None
+        decoded_vb = []
+        current = 0
+        for i in encoded_bytestream:
+          # print(hex(i))
+          # print(bin(i).strip('0b').zfill(8))
+          current <<= 7
+          current += (i & (128 - 1))
+          if i >> 7 == 1:
+            decoded_vb.append(current)
+            current = 0
+        return decoded_vb
+
 
     @staticmethod
     def decode(encoded_postings_list):
@@ -198,8 +213,11 @@ class VBEPostings:
         List[int]
             list of docIDs yang merupakan hasil decoding dari encoded_postings_list
         """
-        # TODO
-        return []
+        gap_based_list = VBEPostings.vb_decode(encoded_postings_list)
+        # print(gap_based_list)
+        for i in range(1, len(gap_based_list)):
+            gap_based_list[i] += gap_based_list[i-1]
+        return gap_based_list
 
     @staticmethod
     def decode_tf(encoded_tf_list):
