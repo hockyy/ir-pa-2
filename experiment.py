@@ -121,6 +121,7 @@ def eval(qrels, scoring_name, retrieve_function, query_file="queries.txt", k=100
 
     with open(query_file) as file:
         rbp_scores = []
+        rbp_low_scores = []
         dcg_scores = []
         ap_scores = []
         for qline in file:
@@ -135,16 +136,18 @@ def eval(qrels, scoring_name, retrieve_function, query_file="queries.txt", k=100
                 did = int(re.search(r'\/.*\/.*\/(.*)\.txt', doc).group(1))
                 ranking.append(qrels[qid][did])
             rbp_scores.append(rbp(ranking))
+            rbp_low_scores.append(rbp(ranking, 0.2))
             dcg_scores.append(dcg(ranking))
             ap_scores.append(ap(ranking))
 
     if should_print:
         print(f"Hasil evaluasi {scoring_name} terhadap 30 queries")
-        print("RBP score =", sum(rbp_scores) / len(rbp_scores))
+        print("RBP p=0.8 score =", sum(rbp_scores) / len(rbp_scores))
+        print("RBP p=0.2 score =", sum(rbp_low_scores) / len(rbp_low_scores))
         print("DCG score =", sum(dcg_scores) / len(dcg_scores))
         print("AP score  =", sum(ap_scores) / len(ap_scores))
 
-    return (sum(rbp_scores) / len(rbp_scores)), (sum(dcg_scores) / len(dcg_scores)), (sum(ap_scores) / len(ap_scores))
+    return (sum(rbp_scores) / len(rbp_scores)),(sum(rbp_scores) / len(rbp_low_scores)), (sum(dcg_scores) / len(dcg_scores)), (sum(ap_scores) / len(ap_scores))
 
 
 if __name__ == '__main__':
