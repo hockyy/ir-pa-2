@@ -27,6 +27,7 @@ venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
+
 Kalau yang windows venvnya salah commandnya, bisa di browsing kak hehe saya ga pake windows soalnya maaf kak :pray: 
 
 Selanjutnya jalankan search.py.
@@ -34,6 +35,10 @@ Selanjutnya jalankan search.py.
 Perhatikan bahwa signature fungsi retrieve:
 
 `def retrieve_[method scoring](self, query, k=10, optimize=True, debug=False):`
+
+**WARNING!**
+
+`experiment.py` bisa berbeda saat dijalankan di Operating System atau komputer lain karena sort() hanya mengurutkan berdasarkan score dan tidak mengurutkan berdasarkan nama dokumen, sehingga bisa berbeda sedikit saat dijalankan pada dokumen relevan yang scorenya sama.
 
 **Flag optimize digunakan untuk menggunakan Top-K Wand Algorithm.**
 
