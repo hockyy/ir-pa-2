@@ -29,7 +29,13 @@ pip install -r requirements.txt
 
 Kalau yang windows venvnya salah commandnya, bisa di browsing kak hehe saya ga pake windows soalnya maaf kak :pray: 
 
-Selanjutnya jalankan search.py
+Selanjutnya jalankan search.py.
+
+Perhatikan bahwa signature fungsi retrieve:
+
+`def retrieve_[method scoring](self, query, k=10, optimize=True, debug=False):`
+
+**Flag optimize digunakan untuk menggunakan Top-K Wand Algorithm.**
 
 Hasil menggunakan `retrieve_tfidf`
 
