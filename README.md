@@ -36,9 +36,13 @@ Perhatikan bahwa signature fungsi retrieve:
 
 `def retrieve_[method scoring](self, query, k=10, optimize=True, debug=False):`
 
-**WARNING!**
+## WARNING!
 
-`experiment.py` bisa berbeda saat dijalankan di Operating System atau komputer lain karena sort() hanya mengurutkan berdasarkan score dan tidak mengurutkan berdasarkan nama dokumen, sehingga bisa berbeda sedikit saat dijalankan pada dokumen relevan yang scorenya sama.
+**`experiment.py` bisa berbeda saat dijalankan di Operating System atau komputer lain jika menggunakan index postings list yang berbeda.**
+
+Hal ini karena pada saat reindexing (menjalankan `bsbi.py`) os.walk() yang urutannya bisa berbeda (tidak ada komparator khusus), karena python `sorted()` dan `sort()` stable, hal ini bisa menyebabkan dokumen releval/tidak relevan yang memiliki score sama bisa masuk ke hasil evaluasi, dan menyebabkan sedikit perbedaan pada document name `search.py` dan hasil `experiment.py`
+
+## Hasil Run
 
 **Flag optimize digunakan untuk menggunakan Top-K Wand Algorithm.**
 
